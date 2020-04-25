@@ -4,3 +4,5 @@ exploratory_notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints/
 
 data/*
+
+resources/*
