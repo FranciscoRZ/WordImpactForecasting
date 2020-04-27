@@ -6,3 +6,9 @@ exploratory_notebooks/.ipynb_checkpoints/
 data/*
 
 resources/*
+
+exploratory_notebooks/__pycache__/
+
+results/
+
+test.ipynb
