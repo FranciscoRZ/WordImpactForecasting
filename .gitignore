@@ -9,6 +9,6 @@ resources/*
 
 exploratory_notebooks/__pycache__/
 
-results/
+results/*
 
 test.ipynb

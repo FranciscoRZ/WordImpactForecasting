@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy import stats
 
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split, KFold
@@ -62,6 +63,18 @@ def compute_day_count(ticker:str, data:pd.DataFrame) -> dict:
     for year in data["annee"].unique():
         day_count[year] = tmp.loc[tmp["annee"]==year].set_index(["annee", "mois", "jour"]).shape[0]
     return day_count
+#endregion
+
+#region PREPROCESSING
+def remove_outliers(data:pd.DataFrame, features:list) -> pd.DataFrame:
+    mask = np.where(abs(stats.zscore(data.loc[:,features])) > 3)
+    return data.iloc[~data.index.isin(mask[0]),:]
+
+def mean_encode(X:pd.DataFrame, y:pd.Series, feature:str) -> pd.Series:
+    X.loc[:,"label"] = y
+    mean_encoder = X.groupby(feature).apply(np.mean)["label"].copy()
+    X.drop("label", axis='columns', inplace=True)
+    return mean_encoder
 #endregion
 
 #region MODEL_SELECTION
