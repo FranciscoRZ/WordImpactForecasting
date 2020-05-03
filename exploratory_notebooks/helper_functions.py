@@ -66,14 +66,28 @@ def compute_day_count(ticker:str, data:pd.DataFrame) -> dict:
 #endregion
 
 #region PREPROCESSING
-def remove_outliers(data:pd.DataFrame, features:list) -> pd.DataFrame:
-    mask = np.where(abs(stats.zscore(data.loc[:,features])) > 3)
-    return data.iloc[~data.index.isin(mask[0]),:]
-
+def handle_outliers(data:pd.DataFrame, features:list, how:str) -> pd.DataFrame:
+    tickers = data["TICKER"].unique()
+    if how=='remove':
+        all_indeces = []
+        for ticker in tickers:
+            tmp = data.loc[data["TICKER"]==ticker,features]
+            mask = np.where(abs(stats.zscore(tmp)) > 3)
+            all_indeces = all_indeces + list(mask[0])
+        return data.drop(all_indeces)
+    elif how=='cap':
+        new_data = data.copy()
+        for ticker in tickers:
+            tmp = new_data.loc[data["TICKER"]==ticker, features]
+            new_data.loc[tmp.index, features].clip(lower=data.loc[tmp.index, features].quantile(0.25),
+                                                   upper=data.loc[tmp.index, features].quantile(0.75), 
+                                                   inplace=True, axis='columns')
+            
+        return new_data
+        
 def mean_encode(X:pd.DataFrame, y:pd.Series, feature:str) -> pd.Series:
-    X.loc[:,"label"] = y
-    mean_encoder = X.groupby(feature).apply(np.mean)["label"].copy()
-    X.drop("label", axis='columns', inplace=True)
+    tmp = X.merge(y, right_index=True, left_index=True)
+    mean_encoder = tmp.groupby(feature).apply(np.mean)["y"].copy()
     return mean_encoder
 #endregion
 
@@ -103,8 +117,8 @@ def tune_XGB_hyper_params(hyper_parameter_grid:list, X_train:pd.DataFrame,
     for n in range(100):
         param_learning_rate = hyper_parameter_grid[n][0]
         param_max_depth = hyper_parameter_grid[n][1]
-        param_min_child_weight = hyper_parameter_grid[n][2]
-        param_gamma = hyper_parameter_grid[n][3]
+        param_n_estimators = hyper_parameter_grid[n][2]
+        param_subsample = hyper_parameter_grid[n][3]
 
         y_cv = []
         predictions = []
@@ -112,8 +126,8 @@ def tune_XGB_hyper_params(hyper_parameter_grid:list, X_train:pd.DataFrame,
             xgb = XGBClassifier(booster='gbtree', objective='binary:logistic',
                                 learning_rate=param_learning_rate,
                                 max_depth=param_max_depth,
-                                min_child_weight=param_min_child_weight,
-                                gamma=param_gamma)
+                                n_estimators=param_n_estimators,
+                                subsample=param_subsample)
 
             X_train_k, X_valid_k = X_train.iloc[train_index], X_train.iloc[valid_index]
             y_train_k, y_valid_k = y_train.iloc[train_index], y_train.iloc[valid_index]
@@ -126,8 +140,8 @@ def tune_XGB_hyper_params(hyper_parameter_grid:list, X_train:pd.DataFrame,
         results = results + classification_metrics("XGBClassifier",
                                              {'learning_rate':param_learning_rate,
                                               'max_depth':param_max_depth,
-                                              'min_child_weight':param_min_child_weight,
-                                              'gamma':param_gamma},
+                                              'n_estimators':param_n_estimators,
+                                              'subsample':param_subsample},
                                               y_cv, predictions)
     return results
 
