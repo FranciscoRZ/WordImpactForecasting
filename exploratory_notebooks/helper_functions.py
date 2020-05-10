@@ -1,3 +1,5 @@
+from random import choice
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,6 +9,7 @@ from scipy import stats
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split, KFold
 from xgboost.sklearn import XGBClassifier
+from imblearn.over_sampling import SMOTE
 
 #region DATAEXPLORATION
 def numerical_description(variables:list, data:pd.DataFrame) -> pd.DataFrame:
@@ -107,19 +110,24 @@ def classification_metrics(type_model:str, parameters:dict,
              }])
 
 def tune_XGB_hyper_params(hyper_parameter_grid:list, X_train:pd.DataFrame,
-                          y_train:pd.DataFrame) -> list:
+                          y_train:pd.DataFrame, num_folds:int, num_trials:int) -> list:
     '''
     Computes the classification metrics for all the parameters sets in the
     grid
     '''
     results = []
-    kf = KFold(n_splits=4)
-    for n in range(100):
-        param_learning_rate = hyper_parameter_grid[n][0]
-        param_max_depth = hyper_parameter_grid[n][1]
-        param_n_estimators = hyper_parameter_grid[n][2]
-        param_subsample = hyper_parameter_grid[n][3]
+    kf = KFold(n_splits=num_folds)
+    for n in range(num_trials):
+        hyper_param_set = choice(hyper_parameter_grid)
 
+        param_learning_rate = hyper_param_set[0]
+        param_max_depth = hyper_param_set[1]
+        param_n_estimators = hyper_param_set[2]
+        param_subsample = hyper_param_set[3]
+        param_colsample_bytree = hyper_param_set[4]
+        param_colsample_bylevel = hyper_param_set[5]
+        param_gamma = hyper_param_set[6]
+        
         y_cv = []
         predictions = []
         for train_index, valid_index in kf.split(X_train, y_train):
@@ -127,21 +135,30 @@ def tune_XGB_hyper_params(hyper_parameter_grid:list, X_train:pd.DataFrame,
                                 learning_rate=param_learning_rate,
                                 max_depth=param_max_depth,
                                 n_estimators=param_n_estimators,
-                                subsample=param_subsample)
+                                subsample=param_subsample,
+                                colsample_bytree=param_colsample_bytree,
+                                colsample_bylevel=param_colsample_bylevel,
+                                gamma=param_gamma)
 
-            X_train_k, X_valid_k = X_train.iloc[train_index], X_train.iloc[valid_index]
-            y_train_k, y_valid_k = y_train.iloc[train_index], y_train.iloc[valid_index]
+            X_train_k, X_valid_k = X_train.iloc[train_index].copy(), X_train.iloc[valid_index].copy()
+            y_train_k, y_valid_k = y_train.iloc[train_index].copy(), y_train.iloc[valid_index].copy()
 
-            xgb_model = xgb.fit(X_train_k, y_train_k)
+            over_sample = SMOTE()
+            X_train_k, y_train_k = over_sample.fit_resample(X_train, y_train)
+            
+            xgb_model = xgb.fit(X_train_k, y_train_k.y)
             pred_valid = xgb_model.predict(X_valid_k)
-            y_cv = y_cv + y_valid_k.to_list()
+            y_cv = y_cv + y_valid_k.y.to_list()
             predictions = predictions + pred_valid.tolist()
 
         results = results + classification_metrics("XGBClassifier",
                                              {'learning_rate':param_learning_rate,
                                               'max_depth':param_max_depth,
                                               'n_estimators':param_n_estimators,
-                                              'subsample':param_subsample},
+                                              'subsample':param_subsample,
+                                              'colsample_bytree':param_colsample_bytree,
+                                              'colsample_bylevel':param_colsample_bylevel,
+                                              'gamma':param_gamma},
                                               y_cv, predictions)
     return results
 
